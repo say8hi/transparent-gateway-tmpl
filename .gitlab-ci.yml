@@ -1,0 +1,162 @@
+stages:
+  - test
+  - integration-test
+  - build
+
+variables:
+  GO_VERSION: "1.23"
+  DOCKER_DRIVER: overlay2
+
+# Template for Go jobs
+.go-base:
+  image: golang:1.23
+  before_script:
+    - go version
+    - go mod download
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}
+    paths:
+      - .cache/go-build
+      - .cache/go-mod
+
+#######################
+# Stage 1: Unit Tests
+#######################
+
+test:unit:
+  extends: .go-base
+  stage: test
+  script:
+    - echo "Running unit tests..."
+    - go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+    - go tool cover -func=coverage.txt
+  coverage: '/total:.*?(\d+\.\d+)%/'
+  artifacts:
+    reports:
+      junit: report.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.txt
+    paths:
+      - coverage.txt
+    expire_in: 1 week
+
+test:fmt:
+  extends: .go-base
+  stage: test
+  script:
+    - echo "Checking code formatting..."
+    - |
+      UNFORMATTED=$(gofmt -l .)
+      if [ -n "$UNFORMATTED" ]; then
+        echo "The following files are not formatted:"
+        echo "$UNFORMATTED"
+        echo ""
+        echo "Please run: go fmt ./..."
+        exit 1
+      fi
+    - echo "✓ All files are properly formatted"
+
+test:vet:
+  extends: .go-base
+  stage: test
+  script:
+    - echo "Running go vet static analysis..."
+    - go vet ./...
+    - echo "✓ No issues found"
+
+test:mod:
+  extends: .go-base
+  stage: test
+  script:
+    - echo "Checking go.mod and go.sum..."
+    - go mod tidy
+    - |
+      if ! git diff --exit-code go.mod go.sum; then
+        echo "go.mod or go.sum is not tidy"
+        echo "Please run: go mod tidy"
+        exit 1
+      fi
+    - echo "✓ go.mod and go.sum are tidy"
+
+#############################
+# Stage 2: Integration Tests
+#############################
+
+integration-test:
+  extends: .go-base
+  stage: integration-test
+  services:
+    - docker:24-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_TLS_VERIFY: 1
+    DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
+  before_script:
+    - apt-get update && apt-get install -y docker-compose-plugin curl
+    - go mod download
+    - docker info
+  script:
+    - echo "Starting integration test environment..."
+    - docker compose -f test/docker-compose.test.yml up -d
+    - echo "Waiting for services to be ready..."
+    - sleep 10
+    - docker compose -f test/docker-compose.test.yml ps
+    - echo "Running integration tests..."
+    - go test -v -tags=integration ./test/integration/...
+  after_script:
+    - echo "Stopping test environment..."
+    - docker compose -f test/docker-compose.test.yml logs
+    - docker compose -f test/docker-compose.test.yml down -v
+  artifacts:
+    when: always
+    paths:
+      - test/integration/*.log
+    expire_in: 1 week
+
+########################
+# Stage 3: Build Docker
+########################
+
+build:docker:
+  stage: build
+  image: docker:24
+  services:
+    - docker:24-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_TLS_VERIFY: 1
+    DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
+  before_script:
+    - docker info
+  script:
+    - echo "Building Docker image..."
+    - docker build -t api-gateway:${CI_COMMIT_SHORT_SHA} .
+    - docker build -t api-gateway:latest .
+    - echo "Docker image built successfully"
+    - docker images | grep api-gateway
+  only:
+    - master
+    - main
+    - branches
+  except:
+    - tags
+
+# Optional: Build and push to registry (commented out for now)
+# build:push:
+#   stage: build
+#   image: docker:24
+#   services:
+#     - docker:24-dind
+#   before_script:
+#     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+#   script:
+#     - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA .
+#     - docker build -t $CI_REGISTRY_IMAGE:latest .
+#     - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+#     - docker push $CI_REGISTRY_IMAGE:latest
+#   only:
+#     - master
+#     - main

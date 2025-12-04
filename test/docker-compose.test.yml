@@ -1,0 +1,111 @@
+version: '3.8'
+
+services:
+  # Mock backend services
+  mock-crm:
+    build:
+      context: ./mock-backend
+      dockerfile: Dockerfile
+    environment:
+      - SERVICE_NAME=crm-service
+      - PORT=9000
+    ports:
+      - "9001:9000"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - test-network
+
+  mock-cbs:
+    build:
+      context: ./mock-backend
+      dockerfile: Dockerfile
+    environment:
+      - SERVICE_NAME=cbs-service
+      - PORT=9000
+    ports:
+      - "9002:9000"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - test-network
+
+  mock-billing:
+    build:
+      context: ./mock-backend
+      dockerfile: Dockerfile
+    environment:
+      - SERVICE_NAME=billing-service
+      - PORT=9000
+    ports:
+      - "9003:9000"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - test-network
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    environment:
+      # Server configuration
+      - SERVER_PORT=8080
+      - SERVER_READ_TIMEOUT=30s
+      - SERVER_WRITE_TIMEOUT=30s
+      - SERVER_SHUTDOWN_TIMEOUT=10s
+
+      # Backend services
+      - CRM_SERVICE_URL=http://mock-crm:9000
+      - CBS_SERVICE_URL=http://mock-cbs:9000
+      - BILLING_SERVICE_URL=http://mock-billing:9000
+
+      # JWT configuration
+      - JWT_SECRET=test-secret-key-for-integration-tests-only
+      - JWT_ISSUER=api-gateway-test
+      - JWT_AUDIENCE=test-audience
+      - JWT_EXPIRATION=1h
+
+      # CORS configuration
+      - CORS_ALLOWED_ORIGINS=*
+      - CORS_ALLOWED_METHODS=GET,POST,PUT,DELETE,OPTIONS
+      - CORS_ALLOWED_HEADERS=*
+      - CORS_ALLOW_CREDENTIALS=true
+
+      # Logging
+      - LOG_LEVEL=debug
+      - LOG_COMPONENT_NAME=api-gateway-test
+    ports:
+      - "8080:8080"
+    depends_on:
+      mock-crm:
+        condition: service_healthy
+      mock-cbs:
+        condition: service_healthy
+      mock-billing:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - test-network
+
+networks:
+  test-network:
+    driver: bridge
