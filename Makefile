@@ -1,4 +1,4 @@
-.PHONY: help build run test lint clean fmt vet rename install-hooks
+.PHONY: help build run test lint lint-fix clean fmt fmt-check fmt-fix vet rename install-hooks
 
 # variables
 BINARY_NAME=api-gateway
@@ -25,8 +25,11 @@ help:
 	@echo "  build          - build the application binary"
 	@echo "  run            - run the application"
 	@echo "  test           - run tests with coverage"
-	@echo "  lint           - run linter"
-	@echo "  fmt            - format code"
+	@echo "  lint           - run linter (golangci-lint)"
+	@echo "  lint-fix       - run linter and auto-fix issues"
+	@echo "  fmt            - format code (gofumpt or go fmt)"
+	@echo "  fmt-check      - check if code is formatted"
+	@echo "  fmt-fix        - format and organize imports (gofumpt + goimports)"
 	@echo "  vet            - run go vet"
 	@echo "  clean          - remove build artifacts"
 
@@ -65,10 +68,67 @@ lint:
 		exit 1; \
 	fi
 
-# format code
+# run linter with auto-fix
+lint-fix:
+	@echo "Running linter with auto-fix..."
+	@if command -v golangci-lint >/dev/null 2>&1; then \
+		golangci-lint run --fix ./...; \
+	else \
+		echo "golangci-lint not installed. Install it from https://golangci-lint.run/usage/install/"; \
+		exit 1; \
+	fi
+
+# format code (use gofumpt if available, otherwise go fmt)
 fmt:
-	@echo "Formatting code..."
-	@go fmt ./...
+	@if command -v gofumpt >/dev/null 2>&1; then \
+		echo "Formatting code with gofumpt..."; \
+		gofumpt -l -w .; \
+	else \
+		echo "Formatting code with go fmt..."; \
+		go fmt ./...; \
+	fi
+
+# check if code is formatted
+fmt-check:
+	@if command -v gofumpt >/dev/null 2>&1; then \
+		echo "Checking formatting with gofumpt..."; \
+		UNFORMATTED=$$(gofumpt -l .); \
+		if [ -n "$$UNFORMATTED" ]; then \
+			echo "✗ The following files are not formatted:"; \
+			echo "$$UNFORMATTED"; \
+			echo ""; \
+			echo "Please run: make fmt"; \
+			exit 1; \
+		fi; \
+		echo "✓ All files are properly formatted"; \
+	else \
+		echo "Checking formatting with gofmt..."; \
+		UNFORMATTED=$$(gofmt -l .); \
+		if [ -n "$$UNFORMATTED" ]; then \
+			echo "✗ The following files are not formatted:"; \
+			echo "$$UNFORMATTED"; \
+			echo ""; \
+			echo "Please run: make fmt"; \
+			exit 1; \
+		fi; \
+		echo "✓ All files are properly formatted"; \
+	fi
+
+# format code and organize imports (full formatting)
+fmt-fix:
+	@echo "Running full formatting..."
+	@if command -v gofumpt >/dev/null 2>&1; then \
+		echo "→ Formatting with gofumpt..."; \
+		gofumpt -l -w .; \
+	else \
+		echo "→ Formatting with go fmt..."; \
+		go fmt ./...; \
+	fi
+	@if command -v goimports >/dev/null 2>&1; then \
+		echo "→ Organizing imports with goimports..."; \
+		goimports -w .; \
+	fi
+	@echo "✓ Formatting complete"
 
 # run go vet
 vet:

@@ -12,17 +12,27 @@ if [ ! -f "go.mod" ]; then
     exit 0
 fi
 
-# Run go fmt
-echo "→ Running go fmt..."
-UNFORMATTED=$(gofmt -l .)
+# Run formatter (gofumpt if available, otherwise gofmt)
+if command -v gofumpt >/dev/null 2>&1; then
+    echo "→ Running gofumpt..."
+    UNFORMATTED=$(gofumpt -l .)
+    FORMATTER="gofumpt"
+    FMT_CMD="gofumpt -l -w ."
+else
+    echo "→ Running go fmt..."
+    UNFORMATTED=$(gofmt -l .)
+    FORMATTER="go fmt"
+    FMT_CMD="go fmt ./..."
+fi
+
 if [ -n "$UNFORMATTED" ]; then
     echo "✗ The following files are not formatted:"
     echo "$UNFORMATTED"
     echo ""
-    echo "Please run: go fmt ./..."
+    echo "Please run: $FMT_CMD"
     exit 1
 fi
-echo "✓ go fmt passed"
+echo "✓ $FORMATTER passed"
 
 # Run go vet
 echo "→ Running go vet..."

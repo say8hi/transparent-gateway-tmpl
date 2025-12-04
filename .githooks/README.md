@@ -21,12 +21,22 @@ make install-hooks
 ### pre-commit
 
 Runs before every commit and checks:
-- ✅ **go fmt** - ensures code is properly formatted
+- ✅ **gofumpt/go fmt** - ensures code is properly formatted (uses gofumpt if installed, otherwise go fmt)
 - ✅ **go vet** - runs static analysis to find potential issues
 - ✅ **go test** - runs all tests to ensure nothing is broken
 - ✅ **go mod tidy** - ensures go.mod and go.sum are clean
 
 If any check fails, the commit will be aborted.
+
+**Recommended tools (optional but recommended):**
+- `gofumpt` - stricter formatter than go fmt
+- `golangci-lint` - comprehensive linter
+
+Install them with:
+```bash
+go install mvdan.cc/gofumpt@latest
+go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+```
 
 ## Bypassing Hooks (Use with Caution!)
 

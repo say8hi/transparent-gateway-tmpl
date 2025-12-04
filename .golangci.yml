@@ -1,0 +1,95 @@
+# golangci-lint configuration
+# https://golangci-lint.run/usage/configuration/
+
+run:
+  timeout: 5m
+  tests: true
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    # Default linters
+    - errcheck        # check for unchecked errors
+    - gosimple        # simplify code
+    - govet           # reports suspicious constructs
+    - ineffassign     # detect ineffectual assignments
+    - staticcheck     # go vet on steroids
+    - unused          # check for unused constants, variables, functions and types
+
+    # Additional linters
+    - gofmt           # check whether code was gofmt-ed
+    - gofumpt         # stricter gofmt
+    - goimports       # check import statements are formatted according to goimports
+    - revive          # fast, configurable, extensible, flexible, and beautiful linter for Go
+    - gosec           # security problems
+    - misspell        # check for commonly misspelled English words
+    - goconst         # finds repeated strings that could be replaced by a constant
+    - unconvert       # remove unnecessary type conversions
+    - gocyclo         # check cyclomatic complexity
+    - godox           # detect FIXME, TODO and other comment keywords
+    - prealloc        # find slice declarations that could potentially be pre-allocated
+    - whitespace      # check for unnecessary newlines
+    - nlreturn        # check for a new line before return
+
+  disable:
+    - typecheck       # disabled because it causes issues with generics
+
+linters-settings:
+  gofumpt:
+    extra-rules: true
+    module-path: github.com/gateway/template
+
+  goimports:
+    local-prefixes: github.com/gateway/template
+
+  revive:
+    rules:
+      - name: var-naming
+        severity: warning
+        disabled: false
+      - name: package-comments
+        severity: warning
+        disabled: false
+      - name: exported
+        severity: warning
+        disabled: false
+
+  gocyclo:
+    min-complexity: 15
+
+  goconst:
+    min-len: 3
+    min-occurrences: 3
+
+  misspell:
+    locale: US
+
+  whitespace:
+    multi-if: false
+    multi-func: false
+
+  nlreturn:
+    block-size: 2
+
+issues:
+  exclude-rules:
+    # Exclude some linters from running on tests files
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - errcheck
+        - gosec
+        - goconst
+
+    # Exclude known linters from partially hard-vendored code
+    - path: internal/hmac/
+      linters:
+        - gosec
+
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+output:
+  format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true

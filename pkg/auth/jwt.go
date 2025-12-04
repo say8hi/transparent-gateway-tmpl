@@ -135,7 +135,6 @@ func (m *Manager) ValidateToken(tokenString string) (*Claims, error) {
 		}
 		return []byte(m.config.Secret), nil
 	})
-
 	if err != nil {
 		if errors.Is(err, jwt.ErrTokenExpired) {
 			return nil, ErrExpiredToken
@@ -185,7 +184,6 @@ func (m *Manager) RefreshToken(tokenString string) (string, error) {
 		token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 			return []byte(m.config.Secret), nil
 		}, jwt.WithoutClaimsValidation())
-
 		if err != nil {
 			return "", fmt.Errorf("failed to parse expired token: %w", err)
 		}
@@ -207,7 +205,6 @@ func (m *Manager) ExtractUserID(tokenString string) string {
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		return []byte(m.config.Secret), nil
 	}, jwt.WithoutClaimsValidation())
-
 	if err != nil {
 		return ""
 	}
