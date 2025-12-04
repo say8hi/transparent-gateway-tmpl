@@ -84,7 +84,7 @@ test:mod:
 #############################
 
 integration-test:
-  extends: .go-base
+  image: golang:1.23
   stage: integration-test
   services:
     - docker:24-dind
@@ -94,25 +94,48 @@ integration-test:
     DOCKER_TLS_VERIFY: 1
     DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
   before_script:
-    - apt-get update && apt-get install -y docker-compose-plugin curl
+    - echo "Installing Docker CLI..."
+    - apt-get update -qq
+    - apt-get install -y -qq curl
+    - echo "Installing docker-cli from static binary..."
+    - curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-24.0.7.tgz | tar -xz -C /tmp
+    - mv /tmp/docker/docker /usr/local/bin/
+    - rm -rf /tmp/docker
+    - docker --version
+    - echo "Installing docker-compose plugin..."
+    - mkdir -p /usr/local/lib/docker/cli-plugins
+    - curl -fsSL https://github.com/docker/compose/releases/download/v2.23.0/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose
+    - chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+    - docker compose version
+    - echo "Downloading Go modules..."
     - go mod download
+    - echo "Verifying Docker connection..."
     - docker info
   script:
     - echo "Starting integration test environment..."
     - docker compose -f test/docker-compose.test.yml up -d
     - echo "Waiting for services to be ready..."
-    - sleep 10
+    - sleep 15
+    - echo "Checking service status..."
     - docker compose -f test/docker-compose.test.yml ps
+    - echo "Checking if gateway port is accessible..."
+    - apt-get install -y -qq netcat-openbsd
+    - 'for i in {1..30}; do nc -z localhost 8080 && break || (echo "Attempt $i: Gateway not ready, waiting..."; sleep 2); done'
+    - echo "Testing gateway health endpoint..."
+    - 'curl -v http://localhost:8080/health || echo "Health check failed"'
+    - echo "Checking service logs..."
+    - docker compose -f test/docker-compose.test.yml logs --tail=30
     - echo "Running integration tests..."
-    - go test -v -tags=integration ./test/integration/...
+    - go test -v -tags=integration ./test/integration/... 2>&1 | tee test-output.log
   after_script:
-    - echo "Stopping test environment..."
-    - docker compose -f test/docker-compose.test.yml logs
-    - docker compose -f test/docker-compose.test.yml down -v
+    - 'echo "Cleanup: stopping test environment..."'
+    - 'echo "Final service logs:"'
+    - 'docker compose -f test/docker-compose.test.yml logs --tail=100 || echo "Could not get logs"'
+    - 'docker compose -f test/docker-compose.test.yml down -v || echo "Could not stop containers"'
   artifacts:
     when: always
     paths:
-      - test/integration/*.log
+      - test-output.log
     expire_in: 1 week
 
 ########################
