@@ -1,0 +1,56 @@
+#!/bin/sh
+# Pre-commit hook for Go project
+# Runs go fmt, go vet, and go test before allowing commit
+
+set -e
+
+echo "Running pre-commit checks..."
+
+# Check if this is a Go project
+if [ ! -f "go.mod" ]; then
+    echo "Not a Go project, skipping checks"
+    exit 0
+fi
+
+# Run go fmt
+echo "→ Running go fmt..."
+UNFORMATTED=$(gofmt -l .)
+if [ -n "$UNFORMATTED" ]; then
+    echo "✗ The following files are not formatted:"
+    echo "$UNFORMATTED"
+    echo ""
+    echo "Please run: go fmt ./..."
+    exit 1
+fi
+echo "✓ go fmt passed"
+
+# Run go vet
+echo "→ Running go vet..."
+if ! go vet ./...; then
+    echo "✗ go vet found issues"
+    exit 1
+fi
+echo "✓ go vet passed"
+
+# Run go test
+echo "→ Running go test..."
+if ! go test ./...; then
+    echo "✗ Tests failed"
+    exit 1
+fi
+echo "✓ go test passed"
+
+# Optional: Run go mod tidy check
+echo "→ Checking go.mod and go.sum..."
+go mod tidy
+if ! git diff --exit-code go.mod go.sum > /dev/null; then
+    echo "✗ go.mod or go.sum needs to be tidied"
+    echo "Changes have been made, please review and add them"
+    git diff go.mod go.sum
+    exit 1
+fi
+echo "✓ go.mod and go.sum are tidy"
+
+echo ""
+echo "✓ All pre-commit checks passed!"
+echo ""
